@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>调料管理</title>
+<script src="mqtt.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','Segoe UI',sans-serif;min-height:100vh;display:flex;background:#FEF9E8;color:#3d2e1a;overflow-x:hidden}
+/* ===== 侧边栏 ===== */
+.sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:linear-gradient(180deg,#FFF9E6 0%,#FEF3D6 100%);border-right:1px solid rgba(255,193,7,0.2);display:flex;flex-direction:column;z-index:100;transition:transform 0.3s ease;box-shadow:2px 0 20px rgba(255,193,7,0.08)}
+.sidebar-brand{padding:28px 20px 20px;text-align:center;border-bottom:1px solid rgba(255,193,7,0.15)}
+.sidebar-brand .logo{font-size:36px;display:block;margin-bottom:6px}
+.sidebar-brand h2{font-size:18px;color:#B8860B;font-weight:700;letter-spacing:2px}
+.sidebar-brand p{font-size:11px;color:#C4A35A;margin-top:4px;letter-spacing:1px}
+.sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.sidebar-nav a{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:12px;text-decoration:none;color:#6B5B3E;font-size:15px;font-weight:500;transition:all 0.25s ease;position:relative}
+.sidebar-nav a:hover{background:rgba(255,193,7,0.15);color:#B8860B;transform:translateX(4px)}
+.sidebar-nav a.active{background:linear-gradient(135deg,rgba(255,193,7,0.2),rgba(255,179,0,0.1));color:#8B6914;font-weight:600;box-shadow:0 2px 8px rgba(255,193,7,0.12)}
+.sidebar-nav a.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:24px;background:#FFC107;border-radius:0 3px 3px 0}
+.sidebar-nav .nav-icon{font-size:20px;width:28px;text-align:center}
+.sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,193,7,0.15);text-align:center;font-size:11px;color:#C4A35A}
+/* ===== 主内容区 ===== */
+.main-content{margin-left:260px;flex:1;min-height:100vh;padding:32px 40px;animation:fadeSlideIn 0.5s ease}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+/* ===== 管理页特有 ===== */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:14px}
+.page-header h1{font-size:clamp(20px,4vw,28px);color:#8B6914;display:flex;align-items:center;gap:10px}
+.add-btn{padding:10px 22px;background:linear-gradient(135deg,#FFC107,#FFB300);border:none;color:#5C4A2A;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.3s ease;box-shadow:0 4px 12px rgba(255,193,7,0.3)}
+.add-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,193,7,0.4)}
+.search-bar{width:100%;max-width:400px;margin:0 auto 24px;position:relative}
+.search-bar input{width:100%;padding:12px 18px;border:1px solid rgba(255,193,7,0.2);border-radius:25px;background:#FFFFFF;color:#3d2e1a;font-size:14px;outline:none;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(255,193,7,0.06)}
+.search-bar input:focus{border-color:#FFC107;box-shadow:0 4px 16px rgba(255,193,7,0.15)}
+.search-bar input::placeholder{color:#D4C5A0}
+.table-container{overflow-x:auto;background:#FFFFFF;border:1px solid rgba(255,193,7,0.12);border-radius:14px;box-shadow:0 2px 12px rgba(255,193,7,0.06)}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{padding:14px 16px;text-align:left;border-bottom:1px solid rgba(255,193,7,0.08)}
+th{background:rgba(255,193,7,0.06);font-weight:600;font-size:13px;color:#B8860B;letter-spacing:1px}
+td{font-size:14px;color:#5C4A2A}
+tr:hover td{background:rgba(255,193,7,0.04)}
+.status{display:inline-block;padding:4px 12px;border-radius:15px;font-size:12px;font-weight:500}
+.status.full{background:rgba(76,175,80,0.12);color:#388E3C}
+.status.medium{background:rgba(255,152,0,0.12);color:#E65100}
+.status.low{background:rgba(244,67,54,0.1);color:#C62828}
+.progress-bar{width:100px;height:6px;background:rgba(255,193,7,0.1);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:width 0.5s ease}
+.progress-fill.full{background:linear-gradient(90deg,#8BC34A,#4CAF50)}
+.progress-fill.medium{background:linear-gradient(90deg,#FFC107,#FF9800)}
+.progress-fill.low{background:linear-gradient(90deg,#FF5722,#F44336)}
+.action-btns{display:flex;gap:8px}
+.action-btn{padding:6px 14px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.3s ease}
+.action-btn.edit{background:rgba(255,193,7,0.15);color:#B8860B}
+.action-btn.edit:hover{background:rgba(255,193,7,0.25);transform:translateY(-1px)}
+.action-btn.delete{background:rgba(244,67,54,0.1);color:#C62828}
+.action-btn.delete:hover{background:rgba(244,67,54,0.18);transform:translateY(-1px)}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);justify-content:center;align-items:center;z-index:1000;backdrop-filter:blur(4px)}
+.modal-content{background:#FFFDF5;padding:28px;border-radius:16px;width:90%;max-width:420px;box-shadow:0 10px 40px rgba(0,0,0,0.15);border:1px solid rgba(255,193,7,0.15);animation:fadeSlideIn 0.3s ease}
+.modal-content h2{margin-bottom:22px;font-size:20px;color:#8B6914}
+.form-group{margin-bottom:18px}
+.form-group label{display:block;margin-bottom:6px;font-size:13px;color:#B8860B;font-weight:500}
+.form-group input{width:100%;padding:11px 14px;border:1px solid rgba(255,193,7,0.2);border-radius:10px;background:#FFFFFF;color:#3d2e1a;font-size:14px;outline:none;transition:all 0.3s ease}
+.form-group input:focus{border-color:#FFC107;box-shadow:0 0 0 3px rgba(255,193,7,0.12)}
+.form-actions{display:flex;gap:12px;margin-top:25px}
+.form-actions button{flex:1;padding:12px;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.3s ease}
+.form-actions .cancel{background:#F5F0E0;color:#8B7355}
+.form-actions .cancel:hover{background:#EDE6D0}
+.form-actions .confirm{background:linear-gradient(135deg,#FFC107,#FFB300);color:#5C4A2A;box-shadow:0 4px 12px rgba(255,193,7,0.3)}
+.form-actions button:hover{transform:translateY(-2px)}
+.loading{text-align:center;padding:40px;color:#C4A35A}
+.hamburger{display:none;position:fixed;top:16px;left:16px;z-index:200;width:44px;height:44px;border:none;background:#FFF9E6;border-radius:12px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.08);align-items:center;justify-content:center;flex-direction:column;gap:5px;transition:all 0.3s ease}
+.hamburger span{display:block;width:22px;height:2.5px;background:#B8860B;border-radius:2px;transition:all 0.3s ease}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:99}
+@media(max-width:768px){
+.sidebar{transform:translateX(-100%)}
+.sidebar.open{transform:translateX(0)}
+.main-content{margin-left:0;padding:24px 16px;padding-top:76px}
+.hamburger{display:flex}
+.overlay{display:block}
+.overlay.hidden{display:none}
+.page-header{flex-direction:column;align-items:stretch;text-align:center}
+.search-bar{order:3}
+}
+</style>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+</head>
+<body>
+<div class="overlay hidden" id="overlay" onclick="toggleSidebar()"></div>
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+<aside class="sidebar" id="sidebar">
+<div class="sidebar-brand"><span class="logo">🍳</span><h2>智能厨房</h2><p>Smart Kitchen System</p></div>
+<nav class="sidebar-nav">
+<a href="index.html"><span class="nav-icon">🏠</span>首页</a>
+<a href="monitor.html"><span class="nav-icon">📊</span>实时监控</a>
+<a href="manage.html" class="active"><span class="nav-icon">🧂</span>调料管理</a>
+<a href="profile.html"><span class="nav-icon">📈</span>偏好分析</a>
+<a href="ai.html"><span class="nav-icon">🤖</span>AI智能助手</a>
+</nav>
+<div class="sidebar-footer">v1.0.0 | ESP32-S3</div>
+</aside>
+<div class="main-content">
+<div id="opStatus" style="display:none;position:fixed;top:20px;right:20px;background:linear-gradient(135deg,#FFC107,#FFB300);color:#5C4A2A;padding:12px 20px;border-radius:10px;box-shadow:0 4px 16px rgba(255,193,7,0.45);z-index:2000;font-size:14px;font-weight:600">操作中...</div>
+<div class="page-header">
+<h1>🧂 调料管理</h1>
+<button class="add-btn" onclick="openAddModal()">+ 添加新调料</button>
+</div>
+<div style="background:rgba(255,193,7,0.08);border:1px solid rgba(255,193,7,0.12);border-radius:10px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-size:12px;color:#8B7355">
+<span>💡</span>
+<span>修改调料当前重量时，系统将自动记录减少量到「偏好分析」用量统计中</span>
+</div>
+<div class="search-bar"><input type="text" id="searchInput" placeholder="搜索调料..." onkeyup="filterTable()"></div>
+<div class="table-container">
+<table id="bottleTable">
+<thead><tr><th>ID</th><th>名称</th><th>当前(g)</th><th>最大(g)</th><th>百分比</th><th>状态</th><th>最后更新</th><th>操作</th></tr></thead>
+<tbody id="tableBody"><tr><td colspan="8" class="loading">加载中...</td></tr></tbody>
+</table>
+</div>
+<div class="modal" id="addModal">
+<div class="modal-content">
+<h2>添加调料</h2>
+<div class="form-group"><label>名称</label><input type="text" id="bottleName" placeholder="请输入名称"></div>
+<div class="form-group"><label>当前重量 (g)</label><input type="number" id="currentWeight" placeholder="当前重量"></div>
+<div class="form-group"><label>最大容量 (g)</label><input type="number" id="maxWeight" placeholder="最大容量"></div>
+<div class="form-actions"><button class="cancel" onclick="closeModal()">取消</button><button class="confirm" onclick="addBottle()">确认</button></div>
+</div>
+</div>
+<div class="modal" id="editModal">
+<div class="modal-content">
+<h2>编辑调料</h2>
+<input type="hidden" id="editId">
+<div class="form-group"><label>名称</label><input type="text" id="editName" placeholder="请输入名称"></div>
+<div class="form-group"><label>当前重量 (g)</label><input type="number" id="editCurrent" placeholder="当前重量"></div>
+<div class="form-group"><label>最大容量 (g)</label><input type="number" id="editMax" placeholder="最大容量"></div>
+<div class="form-actions"><button class="cancel" onclick="closeEditModal()">取消</button><button class="confirm" onclick="updateBottle()">更新</button></div>
+</div>
+</div>
+</div>
+<script>
+var API_BASE='';
+let mqttDataReceived = false;   // 收到 MQTT 数据后置 true
+// ===== MQTT 配置 =====
+const MQTT_WS_URL='wss://broker.emqx.io:8084/mqtt';
+const MQTT_TOPIC_BOTTLES='lwx_kitchen_9f3a/bottles';
+const MQTT_TOPIC_STATUS='lwx_kitchen_9f3a/status';
+const MQTT_TOPIC_CONTROL='lwx_kitchen_9f3a/control';
+let mqttClient=null;
+let bottleCache=[];
+let opTimer=null;
+
+function debug(m){
+  console.log('[DBG]',m);
+}
+function isMqttReady(){ return mqttClient && mqttClient.connected; }
+function showOp(text){ var el=document.getElementById('opStatus'); if(el){ el.textContent=text; el.style.display='block'; } }
+function hideOp(){ var el=document.getElementById('opStatus'); if(el) el.style.display='none'; }
+function startOpTimer(){ if(opTimer) clearTimeout(opTimer); opTimer=setTimeout(function(){ opTimer=null; hideOp(); alert('操作超时（5 秒无响应）'); }, 5000); }
+function clearOpTimer(){ if(opTimer){ clearTimeout(opTimer); opTimer=null; } hideOp(); }
+function publishControl(obj){ mqttClient.publish(MQTT_TOPIC_CONTROL, JSON.stringify(obj)); }
+async function loadBottles(){
+  if(isMqttReady()){ publishControl({action:'get_bottles'}); return; }
+  try{
+    var r=await fetch(API_BASE+'/api/bottles');
+    var b=await r.json();
+    renderTable(b);
+  }catch(e){
+    debug('loadBottles错误: '+e.message);
+  }
+}
+function renderTable(bottles){
+  bottleCache=bottles;
+  var tbody=document.getElementById('tableBody');
+  if(bottles.length===0){
+    tbody.innerHTML='<tr><td colspan="8" class="loading">暂无数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML=bottles.map(function(b, i){
+    var sc=b.status==='充足'?'full':b.status==='适中'?'medium':'low';
+    var d=new Date(b.lastUpdate).toLocaleString('zh-CN');
+    return '<tr><td>'+b.id+'</td><td>'+b.name+'</td><td>'+b.currentWeight+'</td><td>'+b.maxWeight+'</td><td><div class="progress-bar"><div class="progress-fill '+sc+'" style="width:'+b.percentage+'%"></div></div>'+b.percentage+'%</td><td><span class="status '+sc+'">'+b.status+'</span></td><td>'+d+'</td><td><div class="action-btns"><button class="action-btn edit" data-id="'+b.id+'" onclick="editBottle(this)">编辑</button><button class="action-btn delete" data-id="'+b.id+'" onclick="deleteBottle(this)">删除</button></div></td></tr>';
+  }).join('');
+}
+function filterTable(){
+  var t=document.getElementById('searchInput').value.toLowerCase();
+  renderTable(bottleCache.filter(function(x){return x.name.toLowerCase().includes(t);}));
+}
+function openAddModal(){document.getElementById('addModal').style.display='flex';}
+function closeModal(){
+  document.getElementById('addModal').style.display='none';
+  document.getElementById('bottleName').value='';
+  document.getElementById('currentWeight').value='';
+  document.getElementById('maxWeight').value='';
+}
+function addBottle(){
+  var n=document.getElementById('bottleName').value;
+  var c=parseFloat(document.getElementById('currentWeight').value);
+  var m=parseFloat(document.getElementById('maxWeight').value);
+  if(!n||isNaN(c)||isNaN(m)){alert('请填写所有字段');return;}
+  closeModal();
+  if(isMqttReady()){
+    showOp('添加中...');
+    startOpTimer();
+    publishControl({action:'add',name:n,currentWeight:c,maxWeight:m});
+  }else{
+    // MQTT 未连接时的局域网兜底
+    fetch(API_BASE+'/api/bottles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,currentWeight:c,maxWeight:m})})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); loadBottles(); })
+      .catch(function(e){ alert('添加失败: '+e.message); });
+  }
+}
+function editBottle(btn){
+  var id=parseInt(btn.getAttribute('data-id'));
+  debug('editBottle('+id+')');
+  // 数据来源：MQTT 收到 .../bottles 后 renderTable() 写入的本地缓存 bottleCache
+  for(var i=0;i<bottleCache.length;i++){
+    if(bottleCache[i].id===id){ fillEditModal(bottleCache[i]); return; }
+  }
+  // 缓存里找不到：MQTT 未连接时尝试局域网 fetch 兜底，否则给友好提示
+  if(!isMqttReady()){
+    fetch(API_BASE+'/api/bottle/'+id).then(function(r){return r.json();}).then(fillEditModal)
+      .catch(function(e){alert('获取数据失败: '+e.message);});
+    return;
+  }
+  alert('数据未同步，请稍后重试');
+}
+function fillEditModal(b){
+  document.getElementById('editId').value=b.id;
+  document.getElementById('editName').value=b.name;
+  document.getElementById('editCurrent').value=b.currentWeight;
+  document.getElementById('editMax').value=b.maxWeight;
+  document.getElementById('editModal').style.display='flex';
+}
+function closeEditModal(){document.getElementById('editModal').style.display='none';}
+function updateBottle(){
+  var id=parseInt(document.getElementById('editId').value);
+  var n=document.getElementById('editName').value;
+  var c=parseFloat(document.getElementById('editCurrent').value);
+  var m=parseFloat(document.getElementById('editMax').value);
+  if(!n||isNaN(c)||isNaN(m)){alert('请填写所有字段');return;}
+  closeEditModal();
+  if(isMqttReady()){
+    showOp('更新中...');
+    startOpTimer();
+    publishControl({action:'update',id:id,name:n,currentWeight:c,maxWeight:m});
+  }else{
+    // MQTT 未连接时的局域网兜底
+    fetch(API_BASE+'/api/bottle/'+id+'?_method=PUT',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,currentWeight:c,maxWeight:m})})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); loadBottles(); })
+      .catch(function(e){ alert('更新失败: '+e.message); });
+  }
+}
+function deleteBottle(btn){
+  var id=parseInt(btn.getAttribute('data-id'));
+  if(!confirm('确认删除？'))return;
+  if(isMqttReady()){
+    showOp('删除中...');
+    startOpTimer();
+    publishControl({action:'delete',id:id});
+  }else{
+    // MQTT 未连接时的局域网兜底
+    fetch(API_BASE+'/api/bottle/'+id+'?_method=DELETE',{method:'POST'})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); loadBottles(); })
+      .catch(function(e){ alert('删除失败: '+e.message); });
+  }
+}
+// 局域网兜底：3 秒内没有收到 MQTT 数据才 fetch 一次（本页无 MQTT，故总会执行一次）；
+// 公网访问时 fetch('/api/bottles') 会 404，被 catch 忽略，不影响页面
+if (!mqttDataReceived) {
+  setTimeout(async () => {
+    if (mqttDataReceived) return;
+    try {
+      const r = await fetch('/api/bottles');
+      const b = await r.json();
+      renderTable(b);
+    } catch (e) {
+      console.log('局域网 fetch 也失败（公网访问时正常）');
+    }
+  }, 3000);
+}
+// ===== MQTT 连接与订阅 =====
+function initManageMQTT(){
+  if (typeof mqtt === 'undefined') { console.error('mqtt.js 未加载'); return; }
+  mqttClient=mqtt.connect(MQTT_WS_URL,{clientId:'webm_'+Math.random().toString(16).slice(2,10)});
+  mqttClient.on('connect',function(){
+    mqttClient.subscribe(MQTT_TOPIC_BOTTLES);
+    mqttClient.subscribe(MQTT_TOPIC_STATUS);
+    publishControl({action:'get_bottles'});   // 首次拉取列表
+  });
+  mqttClient.on('message',function(topic,payload){
+    if(topic===MQTT_TOPIC_BOTTLES){
+      try{
+        var b=JSON.parse(payload.toString());
+        mqttDataReceived=true;
+        clearOpTimer();   // 收到最新数据即视为操作完成
+        renderTable(b);
+      }catch(e){}
+    }
+  });
+  mqttClient.on('error',function(){});
+}
+initManageMQTT();
+
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('hamburger').classList.toggle('active');document.getElementById('overlay').classList.toggle('hidden')}
+</script>
+</body>
+</html>

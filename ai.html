@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI智能调料助手</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','Segoe UI',-apple-system,sans-serif;min-height:100vh;display:flex;background:#FEF9E8;color:#3d2e1a;overflow-x:hidden}
+.sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:linear-gradient(180deg,#FFF9E6 0%,#FEF3D6 100%);border-right:1px solid rgba(255,193,7,0.2);display:flex;flex-direction:column;z-index:100;transition:transform 0.3s ease;box-shadow:2px 0 20px rgba(255,193,7,0.08)}
+.sidebar-brand{padding:28px 20px 20px;text-align:center;border-bottom:1px solid rgba(255,193,7,0.15)}
+.sidebar-brand .logo{font-size:36px;display:block;margin-bottom:6px}
+.sidebar-brand h2{font-size:18px;color:#B8860B;font-weight:700;letter-spacing:2px}
+.sidebar-brand p{font-size:11px;color:#C4A35A;margin-top:4px;letter-spacing:1px}
+.sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.sidebar-nav a{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:12px;text-decoration:none;color:#6B5B3E;font-size:15px;font-weight:500;transition:all 0.25s ease;position:relative}
+.sidebar-nav a:hover{background:rgba(255,193,7,0.15);color:#B8860B;transform:translateX(4px)}
+.sidebar-nav a.active{background:linear-gradient(135deg,rgba(255,193,7,0.2),rgba(255,179,0,0.1));color:#8B6914;font-weight:600;box-shadow:0 2px 8px rgba(255,193,7,0.12)}
+.sidebar-nav a.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:24px;background:#FFC107;border-radius:0 3px 3px 0}
+.sidebar-nav .nav-icon{font-size:20px;width:28px;text-align:center}
+.sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,193,7,0.15);text-align:center;font-size:11px;color:#C4A35A}
+.main-content{margin-left:260px;flex:1;min-height:100vh;padding:32px 40px;display:flex;flex-direction:column;animation:fadeSlideIn 0.5s ease}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:14px}
+.page-header h1{font-size:clamp(20px,4vw,28px);color:#8B6914;display:flex;align-items:center;gap:10px}
+.ai-status{padding:8px 18px;background:rgba(255,193,7,0.12);color:#B8860B;border-radius:25px;font-size:13px;font-weight:500;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(255,193,7,0.1)}
+.ai-status.offline{background:rgba(244,67,54,0.08);color:#C62828;box-shadow:0 2px 8px rgba(244,67,54,0.1)}
+.ai-status.loading{background:rgba(255,152,0,0.1);color:#E65100;box-shadow:0 2px 8px rgba(255,152,0,0.1)}
+.status-dot{width:10px;height:10px;border-radius:50%;background:#B8860B}
+.ai-status.offline .status-dot{background:#C62828}
+.ai-status.loading .status-dot{background:#E65100;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.2)}}
+.tips{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.tip{padding:8px 18px;background:#FFFFFF;border:1px solid rgba(255,193,7,0.15);border-radius:25px;font-size:13px;cursor:pointer;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(255,193,7,0.04);color:#6B5B3E;display:flex;align-items:center;gap:6px}
+.tip:hover{background:rgba(255,193,7,0.08);border-color:#FFC107;transform:translateY(-2px);box-shadow:0 4px 16px rgba(255,193,7,0.12)}
+.chat-container{flex:1;display:flex;flex-direction:column;max-width:950px;width:100%;margin:0 auto}
+.messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:18px;padding:24px;background:#FFFFFF;border:1px solid rgba(255,193,7,0.1);border-radius:18px;box-shadow:0 4px 20px rgba(255,193,7,0.06);margin-bottom:18px;min-height:400px;max-height:58vh}
+.messages::-webkit-scrollbar{width:6px}
+.messages::-webkit-scrollbar-track{background:rgba(255,193,7,0.04);border-radius:3px}
+.messages::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#FFC107,#FFB300);border-radius:3px}
+.msg{display:flex;gap:14px;animation:fadeIn 0.3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{justify-content:flex-end}
+.msg.ai{justify-content:flex-start}
+.avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+.msg.user .avatar{background:linear-gradient(135deg,#FFC107,#FFB300)}
+.msg.ai .avatar{background:linear-gradient(135deg,#B8860B,#D4A017)}
+.bubble{max-width:72%;padding:12px 18px;border-radius:16px;line-height:1.6;font-size:14px;white-space:pre-wrap;word-break:break-word;position:relative}
+.msg.user .bubble{background:linear-gradient(135deg,#FFC107,#FFB300);color:#5C4A2A;border-bottom-right-radius:6px;box-shadow:0 4px 12px rgba(255,193,7,0.25)}
+.msg.ai .bubble{background:#FFFDF5;color:#3d2e1a;border-bottom-left-radius:6px;box-shadow:0 4px 12px rgba(255,193,7,0.06);border:1px solid rgba(255,193,7,0.1)}
+.msg.ai .bubble.error{background:linear-gradient(135deg,#FFF3F3,#FFEBEE);color:#C62828;border:1px solid rgba(244,67,54,0.15)}
+.typing{display:flex;gap:8px;padding:16px 20px;background:#FFFDF5;border-radius:20px;border-bottom-left-radius:6px;align-items:center;border:1px solid rgba(255,193,7,0.1)}
+.typing-dots{display:flex;gap:5px}
+.dot{width:8px;height:8px;background:#D4C5A0;border-radius:50%;animation:bounce 1.4s infinite ease-in-out}
+.dot:nth-child(2){animation-delay:0.2s}
+.dot:nth-child(3){animation-delay:0.4s}
+@keyframes bounce{0%,80%,100%{transform:scale(0.6);opacity:0.5}40%{transform:scale(1);opacity:1}}
+.input-area{display:flex;gap:14px;padding:16px;background:#FFFFFF;border:1px solid rgba(255,193,7,0.1);border-radius:18px;box-shadow:0 4px 20px rgba(255,193,7,0.06)}
+.input-area input{flex:1;padding:14px 22px;border:1px solid rgba(255,193,7,0.15);border-radius:28px;background:#FFFDF5;color:#3d2e1a;font-size:15px;outline:none;transition:all 0.3s ease}
+.input-area input:focus{border-color:#FFC107;box-shadow:0 0 0 4px rgba(255,193,7,0.1)}
+.input-area input::placeholder{color:#D4C5A0}
+.input-area input:disabled{background:#F5F0E0;cursor:not-allowed;opacity:0.7}
+.send-btn{width:50px;height:50px;border-radius:50%;border:none;background:linear-gradient(135deg,#FFC107,#FFB300);color:#5C4A2A;font-size:20px;cursor:pointer;transition:all 0.3s ease;box-shadow:0 4px 15px rgba(255,193,7,0.35);display:flex;align-items:center;justify-content:center}
+.send-btn:hover:not(:disabled){transform:scale(1.1);box-shadow:0 6px 25px rgba(255,193,7,0.45)}
+.send-btn:disabled{background:#E8E0D0;cursor:not-allowed;box-shadow:none}
+.retry-btn{margin-top:10px;padding:8px 18px;background:linear-gradient(135deg,#C62828,#E53935);color:#fff;border:none;border-radius:20px;font-size:13px;cursor:pointer;transition:all 0.3s ease;box-shadow:0 2px 8px rgba(198,40,40,0.3)}
+.retry-btn:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(198,40,40,0.4)}
+.bubble ul,.bubble ol{padding-left:24px;margin:8px 0}
+.bubble li{margin:6px 0}
+.bubble strong{color:inherit;font-weight:600}
+.bubble em{font-style:italic}
+.mode-badge{font-size:11px;padding:3px 8px;border-radius:10px;margin-top:8px;display:inline-block;opacity:0.7}
+.mode-deepseek{background:rgba(255,193,7,0.15);color:#B8860B}
+.mode-fallback{background:rgba(255,152,0,0.12);color:#E65100}
+.recipe-card{width:100%}
+.recipe-title{font-size:16px;font-weight:bold;color:#5C4A2A;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(255,193,7,0.1)}
+.recipe-meta{display:flex;gap:8px;margin-bottom:10px}
+.recipe-meta .difficulty,.recipe-meta .time{padding:3px 8px;border-radius:12px;font-size:11px;font-weight:500}
+.recipe-meta .time{background:rgba(255,193,7,0.12);color:#B8860B}
+.recipe-section{margin-bottom:10px}
+.section-title{font-size:13px;font-weight:600;color:#8B7355;margin-bottom:6px}
+.ingredient-list{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:6px}
+.ingredient-list li{display:flex;align-items:center;gap:4px;padding:4px 10px;background:rgba(255,255,255,0.8);border-radius:16px;font-size:12px;border:1px solid rgba(255,193,7,0.08)}
+.ing-name{color:#5C4A2A}
+.ing-qty{color:#C4A35A;font-size:11px}
+.step-list{list-style:none;padding:0;margin:0;counter-reset:step-counter}
+.step-list li{counter-increment:step-counter;padding:8px 10px;margin-bottom:5px;background:rgba(255,255,255,0.6);border-radius:6px;font-size:12px;line-height:1.5;position:relative;padding-left:26px}
+.step-list li::before{content:counter(step-counter);position:absolute;left:6px;top:50%;transform:translateY(-50%);width:16px;height:16px;background:linear-gradient(135deg,#FFC107,#FFB300);color:#5C4A2A;border-radius:50%;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:bold}
+.step-list li:last-child{margin-bottom:0}
+.hamburger{display:none;position:fixed;top:16px;left:16px;z-index:200;width:44px;height:44px;border:none;background:#FFF9E6;border-radius:12px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.08);align-items:center;justify-content:center;flex-direction:column;gap:5px;transition:all 0.3s ease}
+.hamburger span{display:block;width:22px;height:2.5px;background:#B8860B;border-radius:2px;transition:all 0.3s ease}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:99}
+@media(max-width:768px){
+.sidebar{transform:translateX(-100%)}
+.sidebar.open{transform:translateX(0)}
+.main-content{margin-left:0;padding:24px 16px;padding-top:76px}
+.hamburger{display:flex}
+.overlay{display:block}
+.overlay.hidden{display:none}
+.page-header{flex-direction:column;text-align:center}
+.bubble{max-width:88%;font-size:14px}
+.messages{max-height:50vh;padding:18px}
+.tips{padding:0;gap:8px}
+.tip{padding:6px 14px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div class="overlay hidden" id="overlay" onclick="toggleSidebar()"></div>
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+<aside class="sidebar" id="sidebar">
+<div class="sidebar-brand"><span class="logo">🍳</span><h2>智能厨房</h2><p>Smart Kitchen System</p></div>
+<nav class="sidebar-nav">
+<a href="index.html"><span class="nav-icon">🏠</span>首页</a>
+<a href="monitor.html"><span class="nav-icon">📊</span>实时监控</a>
+<a href="manage.html"><span class="nav-icon">🧂</span>调料管理</a>
+<a href="profile.html"><span class="nav-icon">📈</span>偏好分析</a>
+<a href="ai.html" class="active"><span class="nav-icon">🤖</span>AI智能助手</a>
+</nav>
+<div class="sidebar-footer">v1.0.0 | ESP32-S3</div>
+</aside>
+<div class="main-content">
+<div class="page-header">
+<h1>🤖 AI智能调料助手</h1>
+<div class="ai-status loading" id="aiStatus"><span class="status-dot"></span><span id="statusText">检查AI状态...</span></div>
+</div>
+<div class="tips">
+<span class="tip" onclick="sendQuery('红烧排骨怎么做？')">🍖 红烧排骨</span>
+<span class="tip" onclick="sendQuery('宫保鸡丁需要什么调料？')">🍗 宫保鸡丁</span>
+<span class="tip" onclick="sendQuery('鱼香肉丝的做法')">🥬 鱼香肉丝</span>
+<span class="tip" onclick="sendQuery('番茄炒蛋放多少盐合适？')">🍳 番茄炒蛋</span>
+<span class="tip" onclick="sendQuery('推荐一道简单家常菜')">✨ 推荐菜谱</span>
+<span class="tip" onclick="sendQuery('3个人吃的麻婆豆腐怎么做？少油少盐')">👨👩👧 多人菜谱</span>
+</div>
+<div class="chat-container">
+<div class="messages" id="messages"></div>
+<div class="input-area">
+<input type="text" id="userInput" placeholder="请输入您想做的菜名或问题..." onkeyup="handleEnter(event)" disabled>
+<button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>➤</button>
+</div>
+</div>
+</div>
+<script>
+const API_BASE='';
+let conversationHistory=[];
+let isLoading=false;
+let lastUserMessage='';
+
+function checkAIStatus() {
+    fetch(API_BASE+'/api/config')
+        .then(r=>r.json())
+        .then(d=>{
+            const s=document.getElementById('aiStatus');
+            const t=document.getElementById('statusText');
+            if(d.hasApiKey){
+                s.className='ai-status';
+                t.textContent='🟢 DeepSeek AI Ready';
+                enableInput();
+            }else{
+                s.className='ai-status offline';
+                t.textContent='🔴 请配置 API Key';
+                showApiKeyModal();
+            }
+        })
+        .catch(()=>{
+            document.getElementById('aiStatus').className='ai-status offline';
+            document.getElementById('statusText').textContent='🔴 AI 需连接 ESP32 局域网才可用';
+        });
+}
+
+function showApiKeyModal(){
+    const m=document.getElementById('messages');
+    m.innerHTML='<div class="msg ai"><div class="avatar">🤖</div><div class="bubble">⚠️ 首次使用需要配置 DeepSeek API Key\n\n请在下方输入您的 API Key，密钥仅保存在本设备中，不会泄露。\n\n<a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:#667eea">获取 DeepSeek API Key →</a></div></div>'+
+    '<div class="msg user" style="justify-content:center;margin-top:10px"><div style="display:flex;gap:10px;width:100%;max-width:400px"><input type="password" id="apiKeyInput" placeholder="输入 DeepSeek API Key" style="flex:1;padding:12px 16px;border:1px solid rgba(0,0,0,0.15);border-radius:25px;font-size:14px;outline:none;background:#f8fafc">'+
+    '<button onclick="saveApiKey()" style="padding:12px 24px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:25px;cursor:pointer;font-size:14px;box-shadow:0 4px 15px rgba(102,126,234,0.35)">保存</button></div></div>';
+}
+
+function saveApiKey(){
+    const key=document.getElementById('apiKeyInput').value.trim();
+    if(!key){alert('请输入 API Key');return;}
+    fetch(API_BASE+'/api/config/apikey',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({apiKey:key})
+    }).then(r=>r.json()).then(d=>{
+        if(d.success){alert('API Key 保存成功！');location.reload();}
+        else{alert('保存失败: '+d.error);}
+    }).catch(e=>alert('保存失败'));
+}
+
+function enableInput(){
+    document.getElementById('userInput').disabled=false;
+    document.getElementById('sendBtn').disabled=false;
+    document.getElementById('userInput').focus();
+}
+
+function addWelcomeMessage(){
+    document.getElementById('messages').innerHTML='<div class="msg ai"><div class="avatar">🤖</div><div class="bubble">您好！我是小A，您的智能厨房助手🍳\n\n我可以帮您：\n• 推荐各种菜品的调料配比\n• 提供详细的做菜步骤\n• 根据人数、口味、忌口生成个性化菜谱\n\n您可以这样问我：\n- 「红烧排骨怎么做？」\n- 「宫保鸡丁需要什么调料？」\n- 「3个人吃的番茄炒蛋放多少盐？」\n- 「推荐一道清淡的家常菜」\n\n开始点菜吧！</div></div>';
+}
+
+function sendQuery(q){
+    document.getElementById('userInput').value=q;
+    sendMessage();
+}
+
+function handleEnter(e){
+    if(e.key==='Enter'&&!isLoading) sendMessage();
+}
+
+function setInputState(e){
+    document.getElementById('userInput').disabled=!e;
+    document.getElementById('sendBtn').disabled=!e;
+}
+
+async function sendMessage(){
+    if(isLoading) return;
+    const inp=document.getElementById('userInput');
+    const msg=inp.value.trim();
+    if(!msg) return;
+    inp.value='';
+    lastUserMessage=msg;
+    isLoading=true;
+    setInputState(false);
+    
+    const msgs=document.getElementById('messages');
+    msgs.innerHTML+='<div class="msg user"><div class="avatar">👤</div><div class="bubble">'+escapeHtml(msg)+'</div></div>';
+    
+    const tid='typing-'+Date.now();
+    msgs.innerHTML+='<div class="msg ai" id="'+tid+'"><div class="avatar">🤖</div><div class="typing"><span style="margin-right:8px;color:#94a3b8;font-size:14px;">AI正在思考...</span><div class="typing-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div></div>';
+    
+    scrollToBottom();
+    
+    try{
+        const r=await fetch(API_BASE+'/api/ai-chat',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({message:msg,history:conversationHistory.slice(-10)})
+        });
+        const d=await r.json();
+        if(d.success){
+            conversationHistory.push({role:'user',content:msg});
+            conversationHistory.push({role:'assistant',content:d.data.content});
+            renderResponse(tid,d.data.content,d.mode);
+        }else{
+            throw new Error(d.error||'AI响应失败');
+        }
+    }catch(e){
+        renderError(tid,e.message);
+    }finally{
+        isLoading=false;
+        setInputState(true);
+        inp.focus();
+    }
+}
+
+function renderResponse(tid,content,mode){
+    const el=document.getElementById(tid);
+    if(!el) return;
+    const b=document.createElement('div');
+    b.className='bubble';
+    b.textContent=content;
+    if(mode){
+        const bc=mode==='deepseek'?'mode-deepseek':'mode-fallback';
+        const mt=mode==='deepseek'?'DeepSeek':'本地';
+        b.innerHTML+='<div class="mode-badge '+bc+'">'+mt+'</div>';
+    }
+    el.innerHTML='';
+    const a=document.createElement('div');
+    a.className='avatar';
+    a.textContent='🤖';
+    el.appendChild(a);
+    el.appendChild(b);
+    scrollToBottom();
+}
+
+function renderError(tid,err){
+    const el=document.getElementById(tid);
+    if(!el) return;
+    const b=document.createElement('div');
+    b.className='bubble error';
+    b.innerHTML='⚠️ AI服务暂时不可用\n\n错误: '+escapeHtml(err)+'\n\n<button class="retry-btn" onclick="retryLastMessage()">🔄 重新发送</button>';
+    el.innerHTML='';
+    const a=document.createElement('div');
+    a.className='avatar';
+    a.textContent='🤖';
+    el.appendChild(a);
+    el.appendChild(b);
+    scrollToBottom();
+}
+
+function retryLastMessage(){
+    if(lastUserMessage){
+        document.getElementById('userInput').value=lastUserMessage;
+        sendMessage();
+    }
+}
+
+function escapeHtml(t){
+    const d=document.createElement('div');
+    d.textContent=t;
+    return d.innerHTML;
+}
+
+function scrollToBottom(){
+    setTimeout(()=>{
+        const m=document.getElementById('messages');
+        if(m) m.scrollTop=m.scrollHeight;
+    },100);
+}
+
+
+document.addEventListener('DOMContentLoaded',()=>{
+    addWelcomeMessage();
+    checkAIStatus();
+});
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('hamburger').classList.toggle('active');document.getElementById('overlay').classList.toggle('hidden')}
+</script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实时监控</title>
+<script src="mqtt.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','Segoe UI',sans-serif;min-height:100vh;display:flex;background:#FEF9E8;color:#3d2e1a;overflow-x:hidden}
+/* ===== 侧边栏 ===== */
+.sidebar{position:fixed;top:0;left:0;width:260px;height:100vh;background:linear-gradient(180deg,#FFF9E6 0%,#FEF3D6 100%);border-right:1px solid rgba(255,193,7,0.2);display:flex;flex-direction:column;z-index:100;transition:transform 0.3s ease;box-shadow:2px 0 20px rgba(255,193,7,0.08)}
+.sidebar-brand{padding:28px 20px 20px;text-align:center;border-bottom:1px solid rgba(255,193,7,0.15)}
+.sidebar-brand .logo{font-size:36px;display:block;margin-bottom:6px}
+.sidebar-brand h2{font-size:18px;color:#B8860B;font-weight:700;letter-spacing:2px}
+.sidebar-brand p{font-size:11px;color:#C4A35A;margin-top:4px;letter-spacing:1px}
+.sidebar-nav{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px}
+.sidebar-nav a{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:12px;text-decoration:none;color:#6B5B3E;font-size:15px;font-weight:500;transition:all 0.25s ease;position:relative}
+.sidebar-nav a:hover{background:rgba(255,193,7,0.15);color:#B8860B;transform:translateX(4px)}
+.sidebar-nav a.active{background:linear-gradient(135deg,rgba(255,193,7,0.2),rgba(255,179,0,0.1));color:#8B6914;font-weight:600;box-shadow:0 2px 8px rgba(255,193,7,0.12)}
+.sidebar-nav a.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:24px;background:#FFC107;border-radius:0 3px 3px 0}
+.sidebar-nav .nav-icon{font-size:20px;width:28px;text-align:center}
+.sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,193,7,0.15);text-align:center;font-size:11px;color:#C4A35A}
+/* ===== 主内容区 ===== */
+.main-content{margin-left:260px;flex:1;min-height:100vh;padding:32px 40px;animation:fadeSlideIn 0.5s ease}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+/* ===== 监控页特有 ===== */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:14px}
+.page-header h1{font-size:clamp(20px,4vw,28px);color:#8B6914;display:flex;align-items:center;gap:10px}
+.page-header h1 span{background:rgba(255,193,7,0.12);padding:6px 12px;border-radius:10px;font-size:14px;color:#B8860B;font-weight:500}
+.refresh-btn{padding:10px 22px;background:linear-gradient(135deg,#FFC107,#FFB300);border:none;color:#5C4A2A;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.3s ease;box-shadow:0 4px 12px rgba(255,193,7,0.3)}
+.refresh-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(255,193,7,0.4)}
+.refresh-btn:active{transform:rotate(180deg)}
+.device-info{background:#FFFFFF;border:1px solid rgba(255,193,7,0.15);border-radius:14px;padding:16px 22px;margin-bottom:28px;box-shadow:0 2px 12px rgba(255,193,7,0.06);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.device-info .info-icon{font-size:22px}
+.device-info .info-text{font-size:13px;color:#8B7355}
+.device-info .info-text strong{color:#B8860B}
+.device-info .info-time{margin-left:auto;font-size:12px;color:#C4A35A;background:rgba(255,193,7,0.08);padding:4px 12px;border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:20px}
+.card{background:#FFFFFF;border:1px solid rgba(255,193,7,0.12);border-radius:16px;padding:22px;transition:all 0.3s ease;box-shadow:0 2px 12px rgba(255,193,7,0.06)}
+.card:hover{transform:translateY(-4px);box-shadow:0 8px 28px rgba(255,193,7,0.14);border-color:rgba(255,193,7,0.3)}
+.card-header{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.card-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px}
+.card-icon.yellow{background:rgba(255,193,7,0.15)}
+.card-icon.orange{background:rgba(255,152,0,0.15)}
+.card-icon.green{background:rgba(76,175,80,0.12)}
+.card-icon.amber{background:rgba(255,179,0,0.15)}
+.card-icon.brown{background:rgba(139,107,20,0.12)}
+.card-title{font-size:17px;font-weight:600;color:#5C4A2A}
+.card-status{display:inline-block;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:500;margin-top:4px}
+.card-status.full{background:rgba(76,175,80,0.12);color:#388E3C}
+.card-status.medium{background:rgba(255,152,0,0.12);color:#E65100}
+.card-status.low{background:rgba(244,67,54,0.1);color:#C62828}
+.card-info{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.info-item{text-align:center;padding:10px;background:#FFFDF5;border-radius:10px;border:1px solid rgba(255,193,7,0.08)}
+.info-label{font-size:11px;color:#C4A35A;margin-bottom:4px}
+.info-value{font-size:17px;font-weight:700;color:#5C4A2A}
+.weight-bar{width:100%;height:7px;background:rgba(255,193,7,0.1);border-radius:4px;margin-top:14px;overflow:hidden}
+.weight-fill{height:100%;border-radius:4px;transition:width 0.8s ease}
+.weight-fill.full{background:linear-gradient(90deg,#8BC34A,#4CAF50)}
+.weight-fill.medium{background:linear-gradient(90deg,#FFC107,#FF9800)}
+.weight-fill.low{background:linear-gradient(90deg,#FF5722,#F44336)}
+.update-time{margin-top:10px;font-size:11px;color:#C4A35A;text-align:right}
+.loading{text-align:center;padding:60px;color:#C4A35A}
+/* ===== 汉堡菜单 ===== */
+.hamburger{display:none;position:fixed;top:16px;left:16px;z-index:200;width:44px;height:44px;border:none;background:#FFF9E6;border-radius:12px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.08);align-items:center;justify-content:center;flex-direction:column;gap:5px;transition:all 0.3s ease}
+.hamburger span{display:block;width:22px;height:2.5px;background:#B8860B;border-radius:2px;transition:all 0.3s ease}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(5px,5px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px)}
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:99}
+@media(max-width:768px){
+.sidebar{transform:translateX(-100%)}
+.sidebar.open{transform:translateX(0)}
+.main-content{margin-left:0;padding:24px 16px;padding-top:76px}
+.hamburger{display:flex}
+.overlay{display:block}
+.overlay.hidden{display:none}
+.page-header{flex-direction:column;align-items:stretch;text-align:center}
+.grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="overlay hidden" id="overlay" onclick="toggleSidebar()"></div>
+<button class="hamburger" id="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+<aside class="sidebar" id="sidebar">
+<div class="sidebar-brand"><span class="logo">🍳</span><h2>智能厨房</h2><p>Smart Kitchen System</p></div>
+<nav class="sidebar-nav">
+<a href="index.html"><span class="nav-icon">🏠</span>首页</a>
+<a href="monitor.html" class="active"><span class="nav-icon">📊</span>实时监控</a>
+<a href="manage.html"><span class="nav-icon">🧂</span>调料管理</a>
+<a href="profile.html"><span class="nav-icon">📈</span>偏好分析</a>
+<a href="ai.html"><span class="nav-icon">🤖</span>AI智能助手</a>
+</nav>
+<div class="sidebar-footer">v1.0.0 | ESP32-S3</div>
+</aside>
+<div class="main-content">
+<div id="mqttStatus">🔴 MQTT 未连接</div>
+<div id="lastSync">最后同步: --</div>
+<div class="page-header">
+<h1>📊 实时监控 <span>ESP32-S3</span></h1>
+<button class="refresh-btn" onclick="loadBottles()">🔄 刷新数据</button>
+</div>
+<div class="device-info">
+<span class="info-icon">💡</span>
+<span class="info-text">设备: <strong>ESP32-S3</strong> | 轮询间隔: <strong>5秒</strong> | 最后同步: <span id="lastSyncInfo">--</span></span>
+<span class="info-time">🟢 在线</span>
+</div>
+<div class="grid" id="bottleGrid"><div class="loading">正在加载数据...</div></div>
+</div>
+<script>
+const API_BASE='';
+const MQTT_WS_URL='wss://broker.emqx.io:8084/mqtt';
+const MQTT_TOPIC_BOTTLES='lwx_kitchen_9f3a/bottles';
+const MQTT_TOPIC_STATUS='lwx_kitchen_9f3a/status';
+const MQTT_TOPIC_CONTROL='lwx_kitchen_9f3a/control';
+let mqttClient=null;
+let mqttDataReceived=false;
+function setMqttStatus(text){const el=document.getElementById('mqttStatus');if(el)el.textContent=text;}
+function updateLastSync(){const t=new Date().toLocaleTimeString();const a=document.getElementById('lastSync');if(a)a.textContent='最后同步: '+t;const b=document.getElementById('lastSyncInfo');if(b)b.textContent=t;}
+async function loadBottles(){if(mqttClient&&mqttClient.connected){mqttClient.publish(MQTT_TOPIC_CONTROL,'GET_BOTTLES');return;}try{const r=await fetch(API_BASE+'/api/bottles');const b=await r.json();renderGrid(b);updateLastSync()}catch(e){console.log('局域网 fetch 失败（公网访问时正常）')}}
+function renderGrid(bottles){const icons=['🧂','🫗','🌶️','🥣','🧄','🍯','🍳','🌿','🧂','🫚'];const colors=['yellow','orange','green','amber','brown'];document.getElementById('bottleGrid').innerHTML=bottles.map((b,i)=>{const sc=b.status==='充足'?'full':b.status==='适中'?'medium':'low';const cc=colors[i%colors.length];const ic=icons[i%icons.length];const d=new Date(b.lastUpdate).toLocaleString('zh-CN');return '<div class=\"card\"><div class=\"card-header\"><div class=\"card-icon '+cc+'\">'+ic+'</div><div><div class=\"card-title\">'+b.name+'</div><span class=\"card-status '+sc+'\">'+b.status+'</span></div></div><div class=\"card-info\"><div class=\"info-item\"><div class=\"info-label\">当前</div><div class=\"info-value\">'+b.currentWeight+'g</div></div><div class=\"info-item\"><div class=\"info-label\">最大</div><div class=\"info-value\">'+b.maxWeight+'g</div></div></div><div class=\"weight-bar\"><div class=\"weight-fill '+sc+'\" style=\"width:'+b.percentage+'%\"></div></div><div class=\"update-time\">更新: '+d+'</div></div>'}).join('')}
+function initMQTT(){
+  if (typeof mqtt === 'undefined') {
+    document.getElementById('mqttStatus').textContent = '🔴 mqtt.js 加载失败';
+    console.error('mqtt.js 未加载');
+    return;
+  }
+  mqttClient=mqtt.connect(MQTT_WS_URL,{clientId:'web_'+Math.random().toString(16).slice(2,10)});
+  mqttClient.on('connect',function(){
+    setMqttStatus('🟢 MQTT 已连接');
+    mqttClient.subscribe(MQTT_TOPIC_BOTTLES);
+    mqttClient.subscribe(MQTT_TOPIC_STATUS);
+    mqttClient.publish(MQTT_TOPIC_CONTROL,'GET_BOTTLES');
+  });
+  mqttClient.on('message',function(topic,payload){
+    const msg=payload.toString();
+    if(topic===MQTT_TOPIC_BOTTLES){
+      try{
+        const bottles=JSON.parse(msg);
+        mqttDataReceived=true;
+        renderGrid(bottles);
+        updateLastSync();
+      }catch(e){}
+    }else if(topic===MQTT_TOPIC_STATUS){
+      setMqttStatus('🟢 设备在线');
+    }
+  });
+  mqttClient.on('reconnect',function(){setMqttStatus('🟡 MQTT 重连中');});
+  mqttClient.on('close',function(){setMqttStatus('🔴 MQTT 未连接');});
+  mqttClient.on('error',function(){});
+}
+
+initMQTT();
+
+// 局域网兜底：3 秒内未收到 MQTT 数据，才 fetch 一次（此后不再轮询）；
+// 公网访问时 fetch('/api/bottles') 会 404，被 catch 忽略，不影响已由 MQTT 渲染的页面
+if (!mqttDataReceived) {
+  setTimeout(async () => {
+    if (mqttDataReceived) return;
+    try {
+      const r = await fetch('/api/bottles');
+      const b = await r.json();
+      renderGrid(b);
+    } catch (e) {
+      console.log('局域网 fetch 也失败（公网访问时正常）');
+    }
+  }, 3000);
+}
+
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('hamburger').classList.toggle('active');document.getElementById('overlay').classList.toggle('hidden')}
+</script>
+</body>
+</html>
